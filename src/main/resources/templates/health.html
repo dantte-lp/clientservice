@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout :: layout(~{::title}, ~{::main})}">
+      th:replace="~{layout :: layout('Health Check', ~{::main})}">
 <head>
     <title>Health Check</title>
 </head>
@@ -64,8 +64,8 @@
 
                         <dt class="col-sm-5">Uptime:</dt>
                         <dd class="col-sm-7">
-                            <span th:text="${T(java.util.concurrent.TimeUnit).MILLISECONDS.toHours(health.server.uptime)}"></span> hours
-                            <span th:text="${T(java.util.concurrent.TimeUnit).MILLISECONDS.toMinutes(health.server.uptime) % 60}"></span> minutes
+                            <span th:text="${health.server.uptimeHours}"></span> hours
+                            <span th:text="${health.server.uptimeMinutes}"></span> minutes
                         </dd>
                     </dl>
 
