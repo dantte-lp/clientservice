@@ -1,7 +1,11 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout}">
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head}"></head>
 <body>
-<div class="container container-main" th:fragment="content">
+
+<nav th:replace="~{layout :: navbar}"></nav>
+
+<div class="container container-main">
     <div class="row justify-content-center">
         <div class="col-md-8">
             <div class="card">
@@ -102,9 +106,9 @@
                             <div class="col-md-6">
                                 <label class="form-label">Номер клиента</label>
                                 <div class="input-group">
-                                        <span class="input-group-text">
-                                            <i class="bi bi-hash"></i>
-                                        </span>
+                                    <span class="input-group-text">
+                                        <i class="bi bi-hash"></i>
+                                    </span>
                                     <input type="text"
                                            class="form-control"
                                            th:value="${client.clientNumber}"
@@ -115,9 +119,9 @@
                             <div class="col-md-6">
                                 <label class="form-label">Дата создания</label>
                                 <div class="input-group">
-                                        <span class="input-group-text">
-                                            <i class="bi bi-calendar-check"></i>
-                                        </span>
+                                    <span class="input-group-text">
+                                        <i class="bi bi-calendar-check"></i>
+                                    </span>
                                     <input type="text"
                                            class="form-control"
                                            th:value="${#temporals.format(client.createdAt, 'dd.MM.yyyy HH:mm')}"
@@ -149,5 +153,9 @@
         document.getElementById('birthDate').max = new Date().toISOString().split('T')[0];
     </script>
 </div>
+
+<footer th:replace="~{layout :: footer}"></footer>
+<script th:replace="~{layout :: scripts}"></script>
+
 </body>
 </html>

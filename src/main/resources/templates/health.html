@@ -1,7 +1,11 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout}">
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head}"></head>
 <body>
-<div class="container container-main" th:fragment="content">
+
+<nav th:replace="~{layout :: navbar}"></nav>
+
+<div class="container container-main">
     <div class="row">
         <div class="col-12">
             <div class="card mb-4">
@@ -14,12 +18,12 @@
                 <div class="card-body">
                     <div class="d-flex align-items-center mb-3">
                         <div class="status-badge me-3">
-                                <span class="badge fs-5"
-                                      th:classappend="${health.status == 'UP'} ? 'bg-success' : 'bg-danger'">
-                                    <i class="bi bi-circle-fill me-2"
-                                       th:classappend="${health.status == 'UP'} ? 'bi-check-circle-fill' : 'bi-x-circle-fill'"></i>
-                                    <span th:text="${health.status}"></span>
-                                </span>
+                            <span class="badge fs-5"
+                                  th:classappend="${health.status == 'UP'} ? 'bg-success' : 'bg-danger'">
+                                <i class="bi bi-circle-fill me-2"
+                                   th:classappend="${health.status == 'UP'} ? 'bi-check-circle-fill' : 'bi-x-circle-fill'"></i>
+                                <span th:text="${health.status}"></span>
+                            </span>
                         </div>
                         <div>
                             <strong>Timestamp:</strong>
@@ -94,12 +98,12 @@
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
-                            <span class="badge"
-                                  th:classappend="${health.database.status == 'UP'} ? 'bg-success' : 'bg-danger'">
-                                <i class="bi me-1"
-                                   th:classappend="${health.database.status == 'UP'} ? 'bi-check-circle' : 'bi-x-circle'"></i>
-                                <span th:text="${health.database.status}"></span>
-                            </span>
+                        <span class="badge"
+                              th:classappend="${health.database.status == 'UP'} ? 'bg-success' : 'bg-danger'">
+                            <i class="bi me-1"
+                               th:classappend="${health.database.status == 'UP'} ? 'bi-check-circle' : 'bi-x-circle'"></i>
+                            <span th:text="${health.database.status}"></span>
+                        </span>
                     </div>
 
                     <dl class="row mb-0" th:if="${health.database.status == 'UP'}">
@@ -194,5 +198,9 @@
         }, 30000);
     </script>
 </div>
+
+<footer th:replace="~{layout :: footer}"></footer>
+<script th:replace="~{layout :: scripts}"></script>
+
 </body>
 </html>
