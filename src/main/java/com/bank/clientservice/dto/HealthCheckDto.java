@@ -31,6 +31,8 @@ public class HealthCheckDto {
         private String osVersion;
         private String javaVersion;
         private long uptime;
+        private long uptimeHours;
+        private long uptimeMinutes;
         private Map<String, Object> memory;
     }
 

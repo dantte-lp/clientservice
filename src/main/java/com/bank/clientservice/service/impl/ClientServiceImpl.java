@@ -19,6 +19,7 @@ import java.net.InetAddress;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 
 @Service
@@ -160,6 +161,8 @@ public class ClientServiceImpl implements ClientService {
                     .osVersion(System.getProperty("os.version"))
                     .javaVersion(System.getProperty("java.version"))
                     .uptime(uptime)
+                    .uptimeHours(uptime / (1000 * 60 * 60))
+                    .uptimeMinutes((uptime / (1000 * 60)) % 60)
                     .memory(memory)
                     .build();
 
