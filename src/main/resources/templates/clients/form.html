@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout :: layout(~{::title}, ~{::main})}">
+<head>
+    <title th:text="${client.id != null ? 'Редактирование клиента' : 'Новый клиент'}"></title>
+</head>
+<body>
+<main>
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="bi bi-person-fill-gear me-2" th:if="${client.id != null}"></i>
+                        <i class="bi bi-person-plus-fill me-2" th:if="${client.id == null}"></i>
+                        <span th:text="${client.id != null ? 'Редактирование клиента' : 'Новый клиент'}"></span>
+                    </h4>
+                </div>
+
+                <div class="card-body">
+                    <div th:if="${errorMessage}" class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <span th:text="${errorMessage}"></span>
+                    </div>
+
+                    <form th:action="${client.id != null} ? @{/clients/{id}(id=${client.id})} : @{/clients}"
+                          th:object="${client}"
+                          method="post">
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="lastName" class="form-label">
+                                    Фамилия <span class="text-danger">*</span>
+                                </label>
+                                <input type="text"
+                                       class="form-control"
+                                       id="lastName"
+                                       th:field="*{lastName}"
+                                       th:classappend="${#fields.hasErrors('lastName')} ? 'is-invalid'"
+                                       placeholder="Иванов"
+                                       required>
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('lastName')}"
+                                     th:errors="*{lastName}"></div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label for="firstName" class="form-label">
+                                    Имя <span class="text-danger">*</span>
+                                </label>
+                                <input type="text"
+                                       class="form-control"
+                                       id="firstName"
+                                       th:field="*{firstName}"
+                                       th:classappend="${#fields.hasErrors('firstName')} ? 'is-invalid'"
+                                       placeholder="Иван"
+                                       required>
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('firstName')}"
+                                     th:errors="*{firstName}"></div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label for="middleName" class="form-label">Отчество</label>
+                                <input type="text"
+                                       class="form-control"
+                                       id="middleName"
+                                       th:field="*{middleName}"
+                                       placeholder="Иванович">
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="birthDate" class="form-label">
+                                    Дата рождения <span class="text-danger">*</span>
+                                </label>
+                                <input type="date"
+                                       class="form-control"
+                                       id="birthDate"
+                                       th:field="*{birthDate}"
+                                       th:classappend="${#fields.hasErrors('birthDate')} ? 'is-invalid'"
+                                       required>
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('birthDate')}"
+                                     th:errors="*{birthDate}"></div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="citizenship" class="form-label">
+                                    Гражданство <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select"
+                                        id="citizenship"
+                                        th:field="*{citizenship}"
+                                        th:classappend="${#fields.hasErrors('citizenship')} ? 'is-invalid'"
+                                        required>
+                                    <option value="">Выберите гражданство...</option>
+                                    <option th:each="country : ${countries}"
+                                            th:value="${country}"
+                                            th:text="${country}"></option>
+                                </select>
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('citizenship')}"
+                                     th:errors="*{citizenship}"></div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3" th:if="${client.id != null}">
+                            <div class="col-md-6">
+                                <label class="form-label">Номер клиента</label>
+                                <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-hash"></i>
+                                        </span>
+                                    <input type="text"
+                                           class="form-control"
+                                           th:value="${client.clientNumber}"
+                                           readonly>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Дата создания</label>
+                                <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="bi bi-calendar-check"></i>
+                                        </span>
+                                    <input type="text"
+                                           class="form-control"
+                                           th:value="${#temporals.format(client.createdAt, 'dd.MM.yyyy HH:mm')}"
+                                           readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex justify-content-between">
+                            <a href="/clientservice/clients" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>
+                                Отмена
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-2"></i>
+                                <span th:text="${client.id != null ? 'Сохранить изменения' : 'Создать клиента'}"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set max date for birth date (today)
+        document.getElementById('birthDate').max = new Date().toISOString().split('T')[0];
+    </script>
+</main>
+</body>
+</html>

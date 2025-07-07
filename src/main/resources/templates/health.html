@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout :: layout(~{::title}, ~{::main})}">
+<head>
+    <title>Health Check</title>
+</head>
+<body>
+<main>
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="bi bi-heart-pulse me-2"></i>
+                        Health Check Status
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="status-badge me-3">
+                                <span class="badge fs-5"
+                                      th:classappend="${health.status == 'UP'} ? 'bg-success' : 'bg-danger'">
+                                    <i class="bi bi-circle-fill me-2"
+                                       th:classappend="${health.status == 'UP'} ? 'bi-check-circle-fill' : 'bi-x-circle-fill'"></i>
+                                    <span th:text="${health.status}"></span>
+                                </span>
+                        </div>
+                        <div>
+                            <strong>Timestamp:</strong>
+                            <span th:text="${#temporals.format(health.timestamp, 'dd.MM.yyyy HH:mm:ss')}"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Server Info -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-server me-2"></i>
+                        Server Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Hostname:</dt>
+                        <dd class="col-sm-7" th:text="${health.server.hostname}"></dd>
+
+                        <dt class="col-sm-5">IP Address:</dt>
+                        <dd class="col-sm-7" th:text="${health.server.ipAddress}"></dd>
+
+                        <dt class="col-sm-5">OS:</dt>
+                        <dd class="col-sm-7">
+                            <span th:text="${health.server.osName}"></span>
+                            <span th:text="${health.server.osVersion}"></span>
+                        </dd>
+
+                        <dt class="col-sm-5">Java Version:</dt>
+                        <dd class="col-sm-7" th:text="${health.server.javaVersion}"></dd>
+
+                        <dt class="col-sm-5">Uptime:</dt>
+                        <dd class="col-sm-7">
+                            <span th:text="${T(java.util.concurrent.TimeUnit).MILLISECONDS.toHours(health.server.uptime)}"></span> hours
+                            <span th:text="${T(java.util.concurrent.TimeUnit).MILLISECONDS.toMinutes(health.server.uptime) % 60}"></span> minutes
+                        </dd>
+                    </dl>
+
+                    <h6 class="mt-3 mb-2">Memory Usage:</h6>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Total:</dt>
+                        <dd class="col-sm-7" th:text="${health.server.memory['total']}"></dd>
+
+                        <dt class="col-sm-5">Used:</dt>
+                        <dd class="col-sm-7" th:text="${health.server.memory['used']}"></dd>
+
+                        <dt class="col-sm-5">Free:</dt>
+                        <dd class="col-sm-7" th:text="${health.server.memory['free']}"></dd>
+
+                        <dt class="col-sm-5">Max:</dt>
+                        <dd class="col-sm-7" th:text="${health.server.memory['max']}"></dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Info -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-database me-2"></i>
+                        Database Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                            <span class="badge"
+                                  th:classappend="${health.database.status == 'UP'} ? 'bg-success' : 'bg-danger'">
+                                <i class="bi me-1"
+                                   th:classappend="${health.database.status == 'UP'} ? 'bi-check-circle' : 'bi-x-circle'"></i>
+                                <span th:text="${health.database.status}"></span>
+                            </span>
+                    </div>
+
+                    <dl class="row mb-0" th:if="${health.database.status == 'UP'}">
+                        <dt class="col-sm-5">Product:</dt>
+                        <dd class="col-sm-7">
+                            <span th:text="${health.database.databaseProductName}"></span>
+                            <span th:text="${health.database.databaseProductVersion}"></span>
+                        </dd>
+
+                        <dt class="col-sm-5">Driver:</dt>
+                        <dd class="col-sm-7">
+                            <span th:text="${health.database.driverName}"></span>
+                            <span th:text="${health.database.driverVersion}"></span>
+                        </dd>
+
+                        <dt class="col-sm-5">URL:</dt>
+                        <dd class="col-sm-7">
+                            <small class="text-muted" th:text="${health.database.url}"></small>
+                        </dd>
+
+                        <dt class="col-sm-5">Clients Count:</dt>
+                        <dd class="col-sm-7">
+                            <span class="badge bg-primary" th:text="${health.database.clientsCount}"></span>
+                        </dd>
+                    </dl>
+
+                    <div th:if="${health.database.status != 'UP'}" class="alert alert-danger mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Database connection failed!
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Info -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-app-indicator me-2"></i>
+                        Application Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-2">Name:</dt>
+                        <dd class="col-sm-10" th:text="${health.application.name}"></dd>
+
+                        <dt class="col-sm-2">Version:</dt>
+                        <dd class="col-sm-10" th:text="${health.application.version}"></dd>
+
+                        <dt class="col-sm-2">Description:</dt>
+                        <dd class="col-sm-10" th:text="${health.application.description}"></dd>
+
+                        <dt class="col-sm-2">Start Time:</dt>
+                        <dd class="col-sm-10" th:text="${#temporals.format(health.application.startTime, 'dd.MM.yyyy HH:mm:ss')}"></dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Info -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-code-slash me-2"></i>
+                        API Health Check
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p>You can also access health check information via REST API:</p>
+                    <code>GET /clientservice/api/v1/clients/health</code>
+                    <hr>
+                    <a href="/clientservice/api/v1/clients/health" target="_blank" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-up-right me-2"></i>
+                        View JSON Response
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh every 30 seconds
+        setTimeout(function() {
+            location.reload();
+        }, 30000);
+    </script>
+</main>
+</body>
+</html>

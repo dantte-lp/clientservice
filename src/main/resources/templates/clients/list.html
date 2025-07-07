@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout :: layout(~{::title}, ~{::main})}">
+<head>
+    <title>Список клиентов</title>
+</head>
+<body>
+<main>
+    <!-- Alerts -->
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        <span th:text="${successMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <span th:text="${errorMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h4 class="mb-0">
+                        <i class="bi bi-people-fill me-2"></i>
+                        Список клиентов
+                    </h4>
+                </div>
+                <div class="col-md-6">
+                    <form th:action="@{/clients}" method="get" class="mb-0">
+                        <div class="input-group search-box">
+                            <i class="bi bi-search"></i>
+                            <input type="text"
+                                   name="search"
+                                   th:value="${search}"
+                                   class="form-control"
+                                   placeholder="Поиск по ФИО, номеру, гражданству...">
+                            <button class="btn btn-primary" type="submit">
+                                Найти
+                            </button>
+                            <a th:if="${search}" href="/clientservice/clients" class="btn btn-outline-secondary">
+                                Сбросить
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                    <tr>
+                        <th>Номер клиента</th>
+                        <th>ФИО</th>
+                        <th>Дата рождения</th>
+                        <th>Возраст</th>
+                        <th>Гражданство</th>
+                        <th>Дата создания</th>
+                        <th class="text-center">Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:if="${#lists.isEmpty(clients)}">
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            Клиенты не найдены
+                        </td>
+                    </tr>
+                    <tr th:each="client : ${clients}">
+                        <td>
+                                    <span class="badge bg-primary">
+                                        <i class="bi bi-hash"></i>
+                                        <span th:text="${client.clientNumber}"></span>
+                                    </span>
+                        </td>
+                        <td>
+                            <a th:href="@{/clients/{id}(id=${client.id})}"
+                               class="text-decoration-none fw-medium">
+                                <span th:text="${client.fullName}"></span>
+                            </a>
+                        </td>
+                        <td>
+                            <i class="bi bi-calendar3 me-1 text-muted"></i>
+                            <span th:text="${#temporals.format(client.birthDate, 'dd.MM.yyyy')}"></span>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary" th:text="${client.age + ' лет'}"></span>
+                        </td>
+                        <td>
+                            <i class="bi bi-globe2 me-1 text-muted"></i>
+                            <span th:text="${client.citizenship}"></span>
+                        </td>
+                        <td>
+                            <small class="text-muted"
+                                   th:text="${#temporals.format(client.createdAt, 'dd.MM.yyyy HH:mm')}">
+                            </small>
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a th:href="@{/clients/{id}(id=${client.id})}"
+                                   class="btn btn-outline-primary"
+                                   title="Просмотр">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a th:href="@{/clients/{id}/edit(id=${client.id})}"
+                                   class="btn btn-outline-warning"
+                                   title="Редактировать">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button"
+                                        class="btn btn-outline-danger"
+                                        title="Удалить"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#deleteModal"
+                                        th:data-client-id="${client.id}"
+                                        th:data-client-name="${client.fullName}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card-footer text-muted">
+            <div class="d-flex justify-content-between align-items-center">
+                    <span>
+                        Всего клиентов: <strong th:text="${#lists.size(clients)}"></strong>
+                    </span>
+                <a href="/clientservice/clients/new" class="btn btn-primary">
+                    <i class="bi bi-person-plus me-2"></i>
+                    Добавить клиента
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div class="modal fade" id="deleteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Подтверждение удаления</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Вы уверены, что хотите удалить клиента <strong id="clientName"></strong>?</p>
+                    <p class="text-danger mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        Это действие необратимо!
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <form id="deleteForm" method="post" style="display: inline;">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash me-1"></i>
+                            Удалить
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Handle delete modal
+        document.getElementById('deleteModal').addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const clientId = button.getAttribute('data-client-id');
+            const clientName = button.getAttribute('data-client-name');
+
+            document.getElementById('clientName').textContent = clientName;
+            document.getElementById('deleteForm').action = '/clientservice/clients/' + clientId + '/delete';
+        });
+    </script>
+</main>
+</body>
+</html>
