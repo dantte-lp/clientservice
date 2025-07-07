@@ -63,6 +63,7 @@ public class ClientController {
         ClientDto client = clientService.getClientById(id);
         model.addAttribute("client", client);
         model.addAttribute("countries", clientService.getAllCountries());
+        model.addAttribute("pageTitle", "Редактирование клиента");
         return "clients/form";
     }
 
@@ -92,6 +93,7 @@ public class ClientController {
     public String viewClient(@PathVariable UUID id, Model model) {
         ClientDto client = clientService.getClientById(id);
         model.addAttribute("client", client);
+        model.addAttribute("pageTitle", "Информация о клиенте");
         return "clients/view";
     }
 
@@ -110,6 +112,7 @@ public class ClientController {
     @GetMapping("/health")
     public String healthCheck(Model model) {
         model.addAttribute("health", clientService.getHealthCheck());
+        model.addAttribute("pageTitle", "Health Check");
         return "health";
     }
 }

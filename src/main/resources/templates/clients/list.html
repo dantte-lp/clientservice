@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout :: layout('Список клиентов', ~{::main})}">
-<head>
-    <title>Список клиентов</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head}"></head>
 <body>
-<main>
+
+<nav th:replace="~{layout :: navbar}"></nav>
+
+<div class="container container-main">
     <!-- Alerts -->
     <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
         <i class="bi bi-check-circle-fill me-2"></i>
@@ -180,6 +180,10 @@
             document.getElementById('deleteForm').action = '/clientservice/clients/' + clientId + '/delete';
         });
     </script>
-</main>
+</div>
+
+<footer th:replace="~{layout :: footer}"></footer>
+<script th:replace="~{layout :: scripts}"></script>
+
 </body>
 </html>

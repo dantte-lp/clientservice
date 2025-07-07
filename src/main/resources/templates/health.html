@@ -1,11 +1,7 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout :: layout('Health Check', ~{::main})}">
-<head>
-    <title>Health Check</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout}">
 <body>
-<main>
+<div class="container container-main" th:fragment="content">
     <div class="row">
         <div class="col-12">
             <div class="card mb-4">
@@ -197,6 +193,6 @@
             location.reload();
         }, 30000);
     </script>
-</main>
+</div>
 </body>
 </html>

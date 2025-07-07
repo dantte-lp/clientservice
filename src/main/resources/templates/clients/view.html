@@ -1,11 +1,7 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout :: layout('Информация о клиенте', ~{::main})}">
-<head>
-    <title>Информация о клиенте</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout}">
 <body>
-<main>
+<div class="container container-main" th:fragment="content">
     <div class="row justify-content-center">
         <div class="col-md-8">
             <div class="card">
@@ -165,6 +161,6 @@
             </div>
         </div>
     </div>
-</main>
+</div>
 </body>
 </html>

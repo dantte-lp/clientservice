@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:fragment="layout(title, content)">
-<head>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title th:replace="${title}">Client Service</title>
+    <title th:text="${pageTitle != null ? pageTitle : 'Client Service'}">Client Service</title>
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -136,8 +136,8 @@
     </style>
 </head>
 <body>
-<!-- Navigation -->
-<nav class="navbar navbar-expand-lg navbar-dark">
+
+<nav th:fragment="navbar" class="navbar navbar-expand-lg navbar-dark">
     <div class="container">
         <a class="navbar-brand" href="/clientservice/clients">
             <i class="bi bi-bank"></i>
@@ -173,19 +173,14 @@
     </div>
 </nav>
 
-<!-- Main Content -->
-<div class="container container-main">
-    <div th:replace="${content}"></div>
-</div>
-
-<!-- Footer -->
-<footer class="text-center text-muted py-4">
+<footer th:fragment="footer" class="text-center text-muted py-4">
     <div class="container">
         <p class="mb-0">© 2025 Bank Client Service. Version 1.0.0</p>
     </div>
 </footer>
 
 <!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script th:fragment="scripts" src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>
