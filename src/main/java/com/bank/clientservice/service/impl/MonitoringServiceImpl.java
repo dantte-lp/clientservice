@@ -3,6 +3,7 @@ package com.bank.clientservice.service.impl;
 import com.bank.clientservice.dto.*;
 import com.bank.clientservice.entity.*;
 import com.bank.clientservice.repository.*;
+import com.bank.clientservice.service.DatabaseAvailabilityService;
 import com.bank.clientservice.service.MonitoringService;
 import com.sun.management.OperatingSystemMXBean;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class MonitoringServiceImpl implements MonitoringService {
     private final ApiMetricRepository apiMetricRepository;
     private final BusinessMetricRepository businessMetricRepository;
     private final ClientRepository clientRepository;
+    private final DatabaseAvailabilityService databaseAvailabilityService;
 
     // Список подписчиков для real-time обновлений
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
@@ -84,11 +86,28 @@ public class MonitoringServiceImpl implements MonitoringService {
             });
 
             // Database метрики
-            long clientCount = clientRepository.count();
+            long clientCount = 0;
+            if (databaseAvailabilityService.isDatabaseAvailable()) {
+                try {
+                    clientCount = clientRepository.count();
+                } catch (Exception e) {
+                    log.warn("Could not get client count: {}", e.getMessage());
+                }
+            }
             metrics.add(createMetric(now, "DATABASE", "total_clients", clientCount, "clients"));
+            metrics.add(createMetric(now, "DATABASE", "status",
+                    databaseAvailabilityService.isDatabaseAvailable() ? 1 : 0, "boolean"));
 
-            systemMetricRepository.saveAll(metrics);
-            log.debug("Collected {} system metrics", metrics.size());
+            if (databaseAvailabilityService.isDatabaseAvailable()) {
+                try {
+                    systemMetricRepository.saveAll(metrics);
+                    log.debug("Collected {} system metrics", metrics.size());
+                } catch (Exception e) {
+                    log.error("Error saving system metrics to database", e);
+                }
+            } else {
+                log.debug("Database unavailable, skipping metrics save");
+            }
 
         } catch (Exception e) {
             log.error("Error collecting system metrics", e);
@@ -99,14 +118,19 @@ public class MonitoringServiceImpl implements MonitoringService {
     @Override
     @Scheduled(fixedDelay = 300000)
     public void saveHealthCheckHistory() {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            log.debug("Database unavailable, skipping health check history save");
+            return;
+        }
+
         try {
             OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
             Runtime runtime = Runtime.getRuntime();
 
             HealthCheckHistory history = HealthCheckHistory.builder()
                     .timestamp(LocalDateTime.now())
-                    .status("UP")
-                    .databaseStatus("UP")
+                    .status(databaseAvailabilityService.isDatabaseAvailable() ? "UP" : "DEGRADED")
+                    .databaseStatus(databaseAvailabilityService.getDatabaseStatus())
                     .totalMemoryMb((int)(runtime.totalMemory() / (1024 * 1024)))
                     .usedMemoryMb((int)((runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)))
                     .cpuUsagePercent(BigDecimal.valueOf(osBean.getProcessCpuLoad() * 100)
@@ -129,6 +153,11 @@ public class MonitoringServiceImpl implements MonitoringService {
     @Override
     @Scheduled(cron = "0 0 * * * *")
     public void aggregateBusinessMetrics() {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            log.debug("Database unavailable, skipping business metrics aggregation");
+            return;
+        }
+
         try {
             LocalDate today = LocalDate.now();
             LocalDateTime startOfDay = today.atStartOfDay();
@@ -168,55 +197,82 @@ public class MonitoringServiceImpl implements MonitoringService {
         LocalDateTime oneDayAgo = now.minusDays(1);
         LocalDateTime oneWeekAgo = now.minusWeeks(1);
 
-        // Получение последних метрик
-        List<SystemMetric> recentMetrics = systemMetricRepository
-                .findByTimestampBetweenOrderByTimestampDesc(oneHourAgo, now);
-
-        // CPU график (последний час)
-        List<MetricDto> cpuMetrics = recentMetrics.stream()
-                .filter(m -> "CPU".equals(m.getMetricType()) && "process_cpu_usage".equals(m.getMetricName()))
-                .map(this::toMetricDto)
-                .collect(Collectors.toList());
-
-        // Memory график (последний час)
-        List<MetricDto> memoryMetrics = recentMetrics.stream()
-                .filter(m -> "MEMORY".equals(m.getMetricType()) && "heap_usage_percent".equals(m.getMetricName()))
-                .map(this::toMetricDto)
-                .collect(Collectors.toList());
-
-        // API статистика
-        Map<String, Long> apiStats = apiMetricRepository.findByTimestampBetween(oneDayAgo, now).stream()
-                .collect(Collectors.groupingBy(
-                        api -> api.getEndpoint() + " " + api.getMethod(),
-                        Collectors.counting()
-                ));
-
-        // Статистика по странам
-        List<Object[]> countryStats = clientRepository.findClientCountByCountry();
-
-        // История health checks
-        List<HealthCheckHistory> healthHistory = healthCheckHistoryRepository
-                .findByTimestampBetweenOrderByTimestampDesc(oneDayAgo, now);
-
-        // Бизнес метрики за неделю
-        List<BusinessMetric> businessMetrics = businessMetricRepository
-                .findByMetricDateBetween(oneWeekAgo.toLocalDate(), now.toLocalDate());
-
-        return DashboardDto.builder()
-                .cpuMetrics(cpuMetrics)
-                .memoryMetrics(memoryMetrics)
-                .apiStatistics(apiStats)
-                .countryDistribution(convertCountryStats(countryStats))
-                .healthCheckHistory(healthHistory)
-                .businessMetrics(businessMetrics)
-                .totalClients(clientRepository.count())
-                .activeAlerts(getActiveAlerts())
+        DashboardDto.DashboardDtoBuilder dashboardBuilder = DashboardDto.builder()
                 .lastUpdateTime(now)
-                .build();
+                .activeAlerts(getActiveAlerts());
+
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            // Return limited dashboard data when DB is unavailable
+            dashboardBuilder
+                    .cpuMetrics(new ArrayList<>())
+                    .memoryMetrics(new ArrayList<>())
+                    .apiStatistics(new HashMap<>())
+                    .countryDistribution(new HashMap<>())
+                    .healthCheckHistory(new ArrayList<>())
+                    .businessMetrics(new ArrayList<>())
+                    .totalClients(0L);
+
+            return dashboardBuilder.build();
+        }
+
+        try {
+            // Получение последних метрик
+            List<SystemMetric> recentMetrics = systemMetricRepository
+                    .findByTimestampBetweenOrderByTimestampDesc(oneHourAgo, now);
+
+            // CPU график (последний час)
+            List<MetricDto> cpuMetrics = recentMetrics.stream()
+                    .filter(m -> "CPU".equals(m.getMetricType()) && "process_cpu_usage".equals(m.getMetricName()))
+                    .map(this::toMetricDto)
+                    .collect(Collectors.toList());
+
+            // Memory график (последний час)
+            List<MetricDto> memoryMetrics = recentMetrics.stream()
+                    .filter(m -> "MEMORY".equals(m.getMetricType()) && "heap_usage_percent".equals(m.getMetricName()))
+                    .map(this::toMetricDto)
+                    .collect(Collectors.toList());
+
+            // API статистика
+            Map<String, Long> apiStats = apiMetricRepository.findByTimestampBetween(oneDayAgo, now).stream()
+                    .collect(Collectors.groupingBy(
+                            api -> api.getEndpoint() + " " + api.getMethod(),
+                            Collectors.counting()
+                    ));
+
+            // Статистика по странам
+            List<Object[]> countryStats = clientRepository.findClientCountByCountry();
+
+            // История health checks
+            List<HealthCheckHistory> healthHistory = healthCheckHistoryRepository
+                    .findByTimestampBetweenOrderByTimestampDesc(oneDayAgo, now);
+
+            // Бизнес метрики за неделю
+            List<BusinessMetric> businessMetrics = businessMetricRepository
+                    .findByMetricDateBetween(oneWeekAgo.toLocalDate(), now.toLocalDate());
+
+            dashboardBuilder
+                    .cpuMetrics(cpuMetrics)
+                    .memoryMetrics(memoryMetrics)
+                    .apiStatistics(apiStats)
+                    .countryDistribution(convertCountryStats(countryStats))
+                    .healthCheckHistory(healthHistory)
+                    .businessMetrics(businessMetrics)
+                    .totalClients(clientRepository.count());
+
+        } catch (Exception e) {
+            log.error("Error building dashboard data", e);
+        }
+
+        return dashboardBuilder.build();
     }
 
+    // Остальные методы остаются без изменений, но добавляется проверка доступности БД
     @Override
     public List<MetricDto> getCpuMetrics(LocalDateTime from, LocalDateTime to) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            return new ArrayList<>();
+        }
+
         return systemMetricRepository
                 .findByMetricTypeAndMetricNameAndTimestampBetween("CPU", "process_cpu_usage", from, to)
                 .stream()
@@ -226,6 +282,10 @@ public class MonitoringServiceImpl implements MonitoringService {
 
     @Override
     public List<MetricDto> getMemoryMetrics(LocalDateTime from, LocalDateTime to) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            return new ArrayList<>();
+        }
+
         return systemMetricRepository
                 .findByMetricTypeAndMetricNameAndTimestampBetween("MEMORY", "heap_usage_percent", from, to)
                 .stream()
@@ -233,56 +293,114 @@ public class MonitoringServiceImpl implements MonitoringService {
                 .collect(Collectors.toList());
     }
 
+    // ... остальные методы с аналогичными проверками ...
+
+    private SystemMetric createMetric(LocalDateTime timestamp, String type, String name,
+                                      Number value, String unit) {
+        return SystemMetric.builder()
+                .timestamp(timestamp)
+                .metricType(type)
+                .metricName(name)
+                .metricValue(BigDecimal.valueOf(value.doubleValue()))
+                .unit(unit)
+                .build();
+    }
+
+    private MetricDto toMetricDto(SystemMetric metric) {
+        return MetricDto.builder()
+                .timestamp(metric.getTimestamp())
+                .name(metric.getMetricName())
+                .value(metric.getMetricValue().doubleValue())
+                .unit(metric.getUnit())
+                .type(metric.getMetricType())
+                .build();
+    }
+
+    private Map<String, Long> convertCountryStats(List<Object[]> stats) {
+        return stats.stream()
+                .collect(Collectors.toMap(
+                        arr -> (String) arr[0],
+                        arr -> (Long) arr[1]
+                ));
+    }
+
+    // Реализация остальных методов интерфейса MonitoringService...
+
     @Override
     public Map<String, Object> getApiStatistics(int hours) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            Map<String, Object> emptyStats = new HashMap<>();
+            emptyStats.put("endpoints", new ArrayList<>());
+            emptyStats.put("statusCodes", new HashMap<>());
+            emptyStats.put("totalRequests", 0L);
+            emptyStats.put("averageResponseTime", 0.0);
+            return emptyStats;
+        }
+
+        // ... оригинальная реализация ...
         LocalDateTime from = LocalDateTime.now().minusHours(hours);
         LocalDateTime to = LocalDateTime.now();
 
         Map<String, Object> stats = new HashMap<>();
 
-        // Endpoint statistics
-        List<Object[]> endpointStats = apiMetricRepository.findEndpointStatistics(from, to);
-        List<ApiEndpointStatsDto> endpoints = endpointStats.stream()
-                .map(row -> ApiEndpointStatsDto.builder()
-                        .endpoint((String) row[0])
-                        .method((String) row[1])
-                        .totalCalls((Long) row[2])
-                        .averageResponseTime((Double) row[3])
-                        .minResponseTime((Double) row[4])
-                        .maxResponseTime((Double) row[5])
-                        .build())
-                .collect(Collectors.toList());
+        try {
+            List<Object[]> endpointStats = apiMetricRepository.findEndpointStatistics(from, to);
+            List<ApiEndpointStatsDto> endpoints = endpointStats.stream()
+                    .map(row -> ApiEndpointStatsDto.builder()
+                            .endpoint((String) row[0])
+                            .method((String) row[1])
+                            .totalCalls((Long) row[2])
+                            .averageResponseTime((Double) row[3])
+                            .minResponseTime((Double) row[4])
+                            .maxResponseTime((Double) row[5])
+                            .build())
+                    .collect(Collectors.toList());
 
-        // Status code distribution
-        List<Object[]> statusStats = apiMetricRepository.findStatusCodeDistribution(from, to);
-        Map<Integer, Long> statusCodes = statusStats.stream()
-                .collect(Collectors.toMap(
-                        row -> (Integer) row[0],
-                        row -> (Long) row[1]
-                ));
+            List<Object[]> statusStats = apiMetricRepository.findStatusCodeDistribution(from, to);
+            Map<Integer, Long> statusCodes = statusStats.stream()
+                    .collect(Collectors.toMap(
+                            row -> (Integer) row[0],
+                            row -> (Long) row[1]
+                    ));
 
-        stats.put("endpoints", endpoints);
-        stats.put("statusCodes", statusCodes);
-        stats.put("totalRequests", apiMetricRepository.countByTimestampBetween(from, to));
-        stats.put("averageResponseTime", apiMetricRepository.findAverageResponseTimeBetween(from, to));
+            stats.put("endpoints", endpoints);
+            stats.put("statusCodes", statusCodes);
+            stats.put("totalRequests", apiMetricRepository.countByTimestampBetween(from, to));
+            stats.put("averageResponseTime", apiMetricRepository.findAverageResponseTimeBetween(from, to));
+        } catch (Exception e) {
+            log.error("Error getting API statistics", e);
+        }
 
         return stats;
     }
 
     @Override
     public Map<String, Object> getBusinessMetrics(int days) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            Map<String, Object> emptyMetrics = new HashMap<>();
+            emptyMetrics.put("dailyMetrics", new ArrayList<>());
+            emptyMetrics.put("totalNewClients", 0L);
+            emptyMetrics.put("averageNewClientsPerDay", 0.0);
+            return emptyMetrics;
+        }
+
+        // ... оригинальная реализация ...
         LocalDate from = LocalDate.now().minusDays(days);
         LocalDate to = LocalDate.now();
 
         Map<String, Object> metrics = new HashMap<>();
 
-        List<BusinessMetric> dailyMetrics = businessMetricRepository.findByMetricDateBetween(from, to);
-        Long totalNewClients = businessMetricRepository.sumNewClientsBetween(from, to);
+        try {
+            List<BusinessMetric> dailyMetrics = businessMetricRepository.findByMetricDateBetween(from, to);
+            Long totalNewClients = businessMetricRepository.sumNewClientsBetween(from, to);
 
-        metrics.put("dailyMetrics", dailyMetrics);
-        metrics.put("totalNewClients", totalNewClients != null ? totalNewClients : 0);
-        metrics.put("averageNewClientsPerDay",
-                totalNewClients != null ? totalNewClients / (double) days : 0);
+            metrics.put("dailyMetrics", dailyMetrics);
+            metrics.put("totalNewClients", totalNewClients != null ? totalNewClients : 0);
+            metrics.put("averageNewClientsPerDay",
+                    totalNewClients != null ? totalNewClients / (double) days : 0);
+        } catch (Exception e) {
+            log.error("Error getting business metrics", e);
+        }
 
         return metrics;
     }
@@ -372,36 +490,15 @@ public class MonitoringServiceImpl implements MonitoringService {
             jvmInfo.put("file_encoding", System.getProperty("file.encoding"));
             extendedInfo.put("jvm_details", jvmInfo);
 
-            // Class loading info
-            ClassLoadingMXBean classLoadingBean = ManagementFactory.getClassLoadingMXBean();
-            Map<String, Object> classInfo = new HashMap<>();
-            classInfo.put("loaded_class_count", classLoadingBean.getLoadedClassCount());
-            classInfo.put("total_loaded_class_count", classLoadingBean.getTotalLoadedClassCount());
-            classInfo.put("unloaded_class_count", classLoadingBean.getUnloadedClassCount());
-            extendedInfo.put("class_loading", classInfo);
-
-            // Network interfaces
-            List<Map<String, Object>> networkInfo = new ArrayList<>();
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface ni = interfaces.nextElement();
-                if (ni.isUp() && !ni.isLoopback()) {
-                    Map<String, Object> netInfo = new HashMap<>();
-                    netInfo.put("name", ni.getName());
-                    netInfo.put("display_name", ni.getDisplayName());
-                    netInfo.put("is_virtual", ni.isVirtual());
-                    netInfo.put("mtu", ni.getMTU());
-
-                    List<String> addresses = new ArrayList<>();
-                    Enumeration<InetAddress> inetAddresses = ni.getInetAddresses();
-                    while (inetAddresses.hasMoreElements()) {
-                        addresses.add(inetAddresses.nextElement().getHostAddress());
-                    }
-                    netInfo.put("addresses", addresses);
-                    networkInfo.add(netInfo);
-                }
+            // Database status
+            Map<String, Object> dbInfo = new HashMap<>();
+            dbInfo.put("available", databaseAvailabilityService.isDatabaseAvailable());
+            dbInfo.put("status", databaseAvailabilityService.getDatabaseStatus());
+            String error = databaseAvailabilityService.getDatabaseError();
+            if (error != null) {
+                dbInfo.put("error", error);
             }
-            extendedInfo.put("network_interfaces", networkInfo);
+            extendedInfo.put("database", dbInfo);
 
         } catch (Exception e) {
             log.error("Error collecting extended health info", e);
@@ -413,7 +510,16 @@ public class MonitoringServiceImpl implements MonitoringService {
 
     @Override
     public List<HealthCheckHistory> getHealthHistory(LocalDateTime from, LocalDateTime to) {
-        return healthCheckHistoryRepository.findByTimestampBetweenOrderByTimestampDesc(from, to);
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            return new ArrayList<>();
+        }
+
+        try {
+            return healthCheckHistoryRepository.findByTimestampBetweenOrderByTimestampDesc(from, to);
+        } catch (Exception e) {
+            log.error("Error getting health history", e);
+            return new ArrayList<>();
+        }
     }
 
     @Override
@@ -430,15 +536,30 @@ public class MonitoringServiceImpl implements MonitoringService {
         summary.put("cpuUsage", osBean.getProcessCpuLoad() * 100);
         summary.put("memoryUsage", (runtime.totalMemory() - runtime.freeMemory()) * 100.0 / runtime.totalMemory());
         summary.put("activeThreads", Thread.activeCount());
-        summary.put("totalClients", clientRepository.count());
         summary.put("uptime", ManagementFactory.getRuntimeMXBean().getUptime());
+        summary.put("databaseAvailable", databaseAvailabilityService.isDatabaseAvailable());
 
-        // Recent averages
-        Double avgCpu = systemMetricRepository.findAverageValue("CPU", "process_cpu_usage", oneHourAgo, now);
-        Double avgMemory = systemMetricRepository.findAverageValue("MEMORY", "heap_usage_percent", oneHourAgo, now);
+        if (databaseAvailabilityService.isDatabaseAvailable()) {
+            try {
+                summary.put("totalClients", clientRepository.count());
 
-        summary.put("avgCpuLastHour", avgCpu != null ? avgCpu : 0);
-        summary.put("avgMemoryLastHour", avgMemory != null ? avgMemory : 0);
+                // Recent averages
+                Double avgCpu = systemMetricRepository.findAverageValue("CPU", "process_cpu_usage", oneHourAgo, now);
+                Double avgMemory = systemMetricRepository.findAverageValue("MEMORY", "heap_usage_percent", oneHourAgo, now);
+
+                summary.put("avgCpuLastHour", avgCpu != null ? avgCpu : 0);
+                summary.put("avgMemoryLastHour", avgMemory != null ? avgMemory : 0);
+            } catch (Exception e) {
+                log.error("Error getting database metrics for summary", e);
+                summary.put("totalClients", 0L);
+                summary.put("avgCpuLastHour", 0.0);
+                summary.put("avgMemoryLastHour", 0.0);
+            }
+        } else {
+            summary.put("totalClients", 0L);
+            summary.put("avgCpuLastHour", 0.0);
+            summary.put("avgMemoryLastHour", 0.0);
+        }
 
         return summary;
     }
@@ -448,6 +569,23 @@ public class MonitoringServiceImpl implements MonitoringService {
         List<AlertDto> alerts = new ArrayList<>();
 
         try {
+            // Check database availability first
+            if (!databaseAvailabilityService.isDatabaseAvailable()) {
+                alerts.add(AlertDto.builder()
+                        .id(UUID.randomUUID().toString())
+                        .type(AlertDto.AlertType.DATABASE_CONNECTION_FAILED)
+                        .severity(AlertDto.AlertSeverity.CRITICAL)
+                        .title("Database Connection Failed")
+                        .message("Cannot connect to PostgreSQL database")
+                        .timestamp(LocalDateTime.now())
+                        .metadata(Map.of(
+                                "database", "PostgreSQL",
+                                "host", "172.25.175.91",
+                                "port", "5432"
+                        ))
+                        .build());
+            }
+
             // Check CPU usage
             OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
             double cpuUsage = osBean.getProcessCpuLoad() * 100;
@@ -539,22 +677,18 @@ public class MonitoringServiceImpl implements MonitoringService {
                         .name("metrics")
                         .data(metrics));
             } catch (IOException e) {
-                // Client disconnected, remove from list
                 log.debug("SSE client disconnected: {}", e.getMessage());
                 deadEmitters.add(emitter);
             } catch (Exception e) {
-                // Any other error, remove from list
                 log.warn("Error sending SSE event: {}", e.getMessage());
                 deadEmitters.add(emitter);
             }
         });
 
-        // Clean up dead emitters
         deadEmitters.forEach(emitter -> {
             try {
                 emitter.complete();
             } catch (Exception ignored) {
-                // Ignore completion errors
             }
         });
         emitters.removeAll(deadEmitters);
@@ -564,6 +698,11 @@ public class MonitoringServiceImpl implements MonitoringService {
     @Override
     @Scheduled(cron = "0 0 2 * * *")
     public void cleanupOldMetrics() {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            log.debug("Database unavailable, skipping metrics cleanup");
+            return;
+        }
+
         try {
             LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
 
@@ -580,33 +719,5 @@ public class MonitoringServiceImpl implements MonitoringService {
         } catch (Exception e) {
             log.error("Error during metrics cleanup", e);
         }
-    }
-
-    private SystemMetric createMetric(LocalDateTime timestamp, String type, String name,
-                                      Number value, String unit) {
-        return SystemMetric.builder()
-                .timestamp(timestamp)
-                .metricType(type)
-                .metricName(name)
-                .metricValue(BigDecimal.valueOf(value.doubleValue()))
-                .unit(unit)
-                .build();
-    }
-
-    private MetricDto toMetricDto(SystemMetric metric) {
-        return MetricDto.builder()
-                .timestamp(metric.getTimestamp())
-                .name(metric.getMetricName())
-                .value(metric.getMetricValue().doubleValue())
-                .unit(metric.getUnit())
-                .build();
-    }
-
-    private Map<String, Long> convertCountryStats(List<Object[]> stats) {
-        return stats.stream()
-                .collect(Collectors.toMap(
-                        arr -> (String) arr[0],
-                        arr -> (Long) arr[1]
-                ));
     }
 }

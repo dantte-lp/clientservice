@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head}"></head>
+<body>
+
+<nav th:replace="~{layout :: navbar}"></nav>
+
+<div class="container container-main">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">
+                        <i class="bi bi-database-x me-2"></i>
+                        База данных недоступна
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <h5 class="alert-heading">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            Система работает в ограниченном режиме
+                        </h5>
+                        <p>В данный момент отсутствует подключение к базе данных. Это означает, что:</p>
+                        <ul>
+                            <li>Невозможно просматривать список клиентов</li>
+                            <li>Невозможно создавать новых клиентов</li>
+                            <li>Невозможно редактировать или удалять клиентов</li>
+                            <li>Мониторинг работает в ограниченном режиме</li>
+                        </ul>
+                        <hr>
+                        <p class="mb-0">
+                            <strong>Рекомендации:</strong>
+                            <br>
+                            1. Проверьте подключение к серверу базы данных
+                            <br>
+                            2. Убедитесь, что PostgreSQL запущен на сервере
+                            <br>
+                            3. Проверьте правильность параметров подключения в конфигурации
+                        </p>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5>Параметры подключения:</h5>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Сервер:</strong></td>
+                                <td>172.25.175.91:5432</td>
+                            </tr>
+                            <tr>
+                                <td><strong>База данных:</strong></td>
+                                <td>clientdb</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Пользователь:</strong></td>
+                                <td>postgres</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Статус:</strong></td>
+                                <td><span class="badge bg-danger">Недоступна</span></td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <a href="/clientservice/clients/health" class="btn btn-primary">
+                            <i class="bi bi-arrow-clockwise me-2"></i>
+                            Проверить статус
+                        </a>
+                        <a href="/clientservice/" class="btn btn-secondary">
+                            <i class="bi bi-house me-2"></i>
+                            На главную
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{layout :: footer}"></footer>
+<script th:replace="~{layout :: scripts}"></script>
+
+<script>
+    // Auto-refresh every 10 seconds
+    setTimeout(function() {
+        location.reload();
+    }, 10000);
+</script>
+
+</body>
+</html>

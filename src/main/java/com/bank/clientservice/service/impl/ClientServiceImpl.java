@@ -4,9 +4,11 @@ import com.bank.clientservice.dto.ClientDto;
 import com.bank.clientservice.dto.HealthCheckDto;
 import com.bank.clientservice.entity.Client;
 import com.bank.clientservice.exception.ClientNotFoundException;
+import com.bank.clientservice.exception.DatabaseUnavailableException;
 import com.bank.clientservice.mapper.ClientMapper;
 import com.bank.clientservice.repository.ClientRepository;
 import com.bank.clientservice.service.ClientService;
+import com.bank.clientservice.service.DatabaseAvailabilityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,6 @@ import java.net.InetAddress;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.*;
 
 @Service
@@ -31,11 +32,16 @@ public class ClientServiceImpl implements ClientService {
     private final ClientRepository clientRepository;
     private final ClientMapper clientMapper;
     private final DataSource dataSource;
+    private final DatabaseAvailabilityService databaseAvailabilityService;
 
     private static final LocalDateTime START_TIME = LocalDateTime.now();
 
     @Override
     public ClientDto createClient(ClientDto clientDto) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            throw new DatabaseUnavailableException("База данных недоступна. Невозможно создать клиента.");
+        }
+
         log.info("Creating new client: {} {}", clientDto.getLastName(), clientDto.getFirstName());
         Client client = clientMapper.toEntity(clientDto);
         Client savedClient = clientRepository.save(client);
@@ -45,6 +51,10 @@ public class ClientServiceImpl implements ClientService {
 
     @Override
     public ClientDto updateClient(UUID id, ClientDto clientDto) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            throw new DatabaseUnavailableException("База данных недоступна. Невозможно обновить клиента.");
+        }
+
         log.info("Updating client with ID: {}", id);
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ClientNotFoundException("Клиент не найден с ID: " + id));
@@ -58,6 +68,10 @@ public class ClientServiceImpl implements ClientService {
     @Override
     @Transactional(readOnly = true)
     public ClientDto getClientById(UUID id) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            throw new DatabaseUnavailableException("База данных недоступна. Невозможно получить данные клиента.");
+        }
+
         log.info("Fetching client with ID: {}", id);
         Client client = clientRepository.findById(id)
                 .orElseThrow(() -> new ClientNotFoundException("Клиент не найден с ID: " + id));
@@ -67,6 +81,10 @@ public class ClientServiceImpl implements ClientService {
     @Override
     @Transactional(readOnly = true)
     public ClientDto getClientByNumber(String clientNumber) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            throw new DatabaseUnavailableException("База данных недоступна. Невозможно получить данные клиента.");
+        }
+
         log.info("Fetching client with number: {}", clientNumber);
         Client client = clientRepository.findByClientNumber(clientNumber)
                 .orElseThrow(() -> new ClientNotFoundException("Клиент не найден с номером: " + clientNumber));
@@ -76,6 +94,11 @@ public class ClientServiceImpl implements ClientService {
     @Override
     @Transactional(readOnly = true)
     public List<ClientDto> getAllClients() {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            log.warn("Database is unavailable, returning empty list");
+            return new ArrayList<>();
+        }
+
         log.info("Fetching all clients");
         List<Client> clients = clientRepository.findAll();
         return clientMapper.toDtoList(clients);
@@ -84,6 +107,11 @@ public class ClientServiceImpl implements ClientService {
     @Override
     @Transactional(readOnly = true)
     public List<ClientDto> searchClients(String search) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            log.warn("Database is unavailable, returning empty list");
+            return new ArrayList<>();
+        }
+
         log.info("Searching clients with query: {}", search);
         if (search == null || search.trim().isEmpty()) {
             return getAllClients();
@@ -94,6 +122,10 @@ public class ClientServiceImpl implements ClientService {
 
     @Override
     public void deleteClient(UUID id) {
+        if (!databaseAvailabilityService.isDatabaseAvailable()) {
+            throw new DatabaseUnavailableException("База данных недоступна. Невозможно удалить клиента.");
+        }
+
         log.info("Deleting client with ID: {}", id);
         if (!clientRepository.existsById(id)) {
             throw new ClientNotFoundException("Клиент не найден с ID: " + id);
@@ -172,28 +204,53 @@ public class ClientServiceImpl implements ClientService {
         }
 
         // Database info
-        try (Connection connection = dataSource.getConnection()) {
-            DatabaseMetaData metaData = connection.getMetaData();
+        HealthCheckDto.DatabaseInfo.DatabaseInfoBuilder databaseInfoBuilder = HealthCheckDto.DatabaseInfo.builder();
 
-            HealthCheckDto.DatabaseInfo databaseInfo = HealthCheckDto.DatabaseInfo.builder()
-                    .status("UP")
-                    .url(metaData.getURL())
-                    .databaseProductName(metaData.getDatabaseProductName())
-                    .databaseProductVersion(metaData.getDatabaseProductVersion())
-                    .driverName(metaData.getDriverName())
-                    .driverVersion(metaData.getDriverVersion())
-                    .clientsCount(clientRepository.count())
-                    .build();
+        if (databaseAvailabilityService.isDatabaseAvailable()) {
+            try (Connection connection = dataSource.getConnection()) {
+                DatabaseMetaData metaData = connection.getMetaData();
 
-            healthCheck.database(databaseInfo);
-        } catch (Exception e) {
-            log.error("Error getting database info", e);
-            HealthCheckDto.DatabaseInfo databaseInfo = HealthCheckDto.DatabaseInfo.builder()
+                databaseInfoBuilder
+                        .status("UP")
+                        .url(metaData.getURL())
+                        .databaseProductName(metaData.getDatabaseProductName())
+                        .databaseProductVersion(metaData.getDatabaseProductVersion())
+                        .driverName(metaData.getDriverName())
+                        .driverVersion(metaData.getDriverVersion());
+
+                try {
+                    databaseInfoBuilder.clientsCount(clientRepository.count());
+                } catch (Exception e) {
+                    log.warn("Could not get client count: {}", e.getMessage());
+                    databaseInfoBuilder.clientsCount(0L);
+                }
+
+            } catch (Exception e) {
+                log.error("Error getting database metadata", e);
+                databaseInfoBuilder
+                        .status("DOWN")
+                        .url("Unknown")
+                        .databaseProductName("PostgreSQL");
+            }
+        } else {
+            String error = databaseAvailabilityService.getDatabaseError();
+            databaseInfoBuilder
                     .status("DOWN")
-                    .build();
-            healthCheck.database(databaseInfo);
+                    .url("jdbc:postgresql://172.25.175.91:5432/clientdb")
+                    .databaseProductName("PostgreSQL")
+                    .databaseProductVersion("Unknown")
+                    .driverName("PostgreSQL JDBC Driver")
+                    .driverVersion("Unknown")
+                    .clientsCount(0L);
+
+            if (error != null) {
+                log.warn("Database is down: {}", error);
+            }
+
             healthCheck.status("DEGRADED");
         }
+
+        healthCheck.database(databaseInfoBuilder.build());
 
         // Application info
         HealthCheckDto.ApplicationInfo applicationInfo = HealthCheckDto.ApplicationInfo.builder()
