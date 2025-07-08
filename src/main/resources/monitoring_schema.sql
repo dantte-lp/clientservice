@@ -27,7 +27,7 @@ CREATE TABLE health_check_history (
     active_threads INTEGER,
     total_clients BIGINT,
     error_count INTEGER DEFAULT 0,
-    details JSONB,
+    details_json TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

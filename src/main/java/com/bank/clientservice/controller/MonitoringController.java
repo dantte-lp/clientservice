@@ -3,6 +3,7 @@ package com.bank.clientservice.controller;
 import com.bank.clientservice.dto.DashboardDto;
 import com.bank.clientservice.dto.MetricDto;
 import com.bank.clientservice.service.MonitoringService;
+import io.micrometer.common.util.internal.logging.InternalLogger;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Controller
@@ -82,6 +85,13 @@ public class MonitoringController {
         return ResponseEntity.ok(info);
     }
 
+    @GetMapping("/api/metrics/summary")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getMetricsSummary() {
+        Map<String, Object> summary = monitoringService.getMetricsSummary();
+        return ResponseEntity.ok(summary);
+    }
+
     // Real-time метрики через Server-Sent Events
     @GetMapping("/api/metrics/stream")
     public SseEmitter streamMetrics() {
@@ -92,18 +102,25 @@ public class MonitoringController {
         monitoringService.addMetricSubscriber(emitter);
 
         // Handle cleanup on timeout/error/completion
+        InternalLogger log = null;
         emitter.onCompletion(() -> {
-            log.debug("SSE connection completed");
+            if (log.isDebugEnabled()) {
+                log.debug("SSE connection completed");
+            }
             monitoringService.removeMetricSubscriber(emitter);
         });
 
         emitter.onTimeout(() -> {
-            log.debug("SSE connection timeout");
+            if (log.isDebugEnabled()) {
+                log.debug("SSE connection timeout");
+            }
             monitoringService.removeMetricSubscriber(emitter);
         });
 
-        emitter.onError(e -> {
-            log.debug("SSE connection error: {}", e.getMessage());
+        emitter.onError(throwable -> {
+            if (log.isDebugEnabled()) {
+                log.debug("SSE connection error: {}", throwable.getMessage());
+            }
             monitoringService.removeMetricSubscriber(emitter);
         });
 

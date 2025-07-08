@@ -4,8 +4,8 @@
 <head>
     <!-- Chart.js для графиков -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.30.0/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.min.js"></script>
 
     <style>
         .metric-card {
@@ -289,6 +289,19 @@
 <script th:inline="javascript">
     // Dashboard data from server
     const dashboardData = /*[[${dashboard}]]*/ {};
+
+    // Initialize metric values with current data
+    if (dashboardData.currentCpuUsage !== undefined && dashboardData.currentCpuUsage !== null) {
+        document.getElementById('cpuUsage').textContent = dashboardData.currentCpuUsage.toFixed(1) + '%';
+    }
+
+    if (dashboardData.currentMemoryUsage !== undefined && dashboardData.currentMemoryUsage !== null) {
+        document.getElementById('memoryUsage').textContent = dashboardData.currentMemoryUsage.toFixed(1) + '%';
+    }
+
+    if (dashboardData.currentUptime !== undefined && dashboardData.currentUptime !== null) {
+        document.getElementById('uptime').textContent = 'Uptime: ' + formatUptime(dashboardData.currentUptime);
+    }
 
     // Chart configurations
     const chartOptions = {
@@ -587,12 +600,27 @@
     // Initialize real-time connection
     connectToMetricsStream();
 
+    // Load initial metrics
+    loadInitialMetrics();
+
     // Clean up on page unload
     window.addEventListener('beforeunload', function() {
         if (eventSource) {
             eventSource.close();
         }
     });
+
+    // Function to load initial metrics
+    function loadInitialMetrics() {
+        fetch('/clientservice/monitoring/api/metrics/summary')
+            .then(response => response.json())
+            .then(data => {
+                updateRealTimeMetrics(data);
+            })
+            .catch(error => {
+                console.error('Error loading initial metrics:', error);
+            });
+    }
 </script>
 
 </body>
